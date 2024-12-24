@@ -9,23 +9,69 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+pthread_mutex_t threadCountMutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define MAX_THREADS 4
+#define MAX_PENDING_CONNECTIONS 100
+
 typedef enum
 {
     WAIT_FOR_MSG,
     IN_MSG
 } ProcessingState;
 
-void perror_die(const char *message) {
+void perror_die(const char *message)
+{
     perror(message);
     exit(EXIT_FAILURE);
 }
 
+int threadCount = 0;
+int overFlowingThread[MAX_PENDING_CONNECTIONS];
+int overflowingCount = 0;
+
+void add_connection(int sockfd)
+{
+    if (overflowingCount < MAX_PENDING_CONNECTIONS)
+    {
+        overFlowingThread[overflowingCount] = sockfd;
+        overflowingCount++;
+        printf("Added socket %d to overflow queue. Overflowing count: %d\n", sockfd, overflowingCount);
+    }
+    else
+    {
+        printf("Overflow queue is full. Rejecting connection from socket %d\n", sockfd);
+        close(sockfd);
+    }
+}
+
+int remove_connection()
+{
+    int sock = 0;
+    if (overflowingCount > 0)
+    {
+        sock = overFlowingThread[0];
+        for (int i = 1; i < overflowingCount; i++)
+        {
+            overFlowingThread[i - 1] = overFlowingThread[i];
+        }
+        overflowingCount--;
+        printf("Removed socket %d from overflow queue. Overflowing count: %d\n", sock, overflowingCount);
+    }
+    else
+    {
+        printf("No connection in overflow queue to remove.\n");
+    }
+    return sock;
+}
 void server_connection(int sockfd)
 {
-    if (send(sockfd, "*", 1, 0) < 1)
+    printf("Server connection started for socket %d\n", sockfd);
+    if (send(sockfd, "Hello", 5, 0) < 1)
     {
         perror_die("send");
     }
+    printf("Sent greeting 'Hello' to socket %d\n", sockfd);
 
     ProcessingState state = WAIT_FOR_MSG;
 
@@ -33,15 +79,20 @@ void server_connection(int sockfd)
     {
         uint8_t buf[1024];
         int len = recv(sockfd, buf, sizeof(buf), 0);
+
         if (len < 0)
         {
             perror_die("recv");
         }
         else if (len == 0)
         {
+            printf("Socket %d closed the connection\n", sockfd);
             break;
         }
 
+        printf("Received %d bytes from socket %d\n", len, sockfd);
+
+        // Handle message processing logic
         for (int i = 0; i < len; ++i)
         {
             switch (state)
@@ -50,6 +101,7 @@ void server_connection(int sockfd)
                 if (buf[i] == '^')
                 {
                     state = IN_MSG;
+                    printf("Switching to IN_MSG state\n");
                 }
                 break;
 
@@ -57,10 +109,12 @@ void server_connection(int sockfd)
                 if (buf[i] == '$')
                 {
                     state = WAIT_FOR_MSG;
+                    printf("Switching back to WAIT_FOR_MSG state\n");
                 }
                 else
                 {
                     buf[i] += 1;
+                    printf("Incremented byte at index %d to %d, sending it back\n", i, buf[i]);
                     if (send(sockfd, &buf[i], 1, 0) < 1)
                     {
                         perror("send error");
@@ -71,60 +125,96 @@ void server_connection(int sockfd)
                 break;
 
             default:
+                if (overflowingCount > 0)
+                {
+                    printf("Default case: Overflow detected, attempting to handle next connection\n");
+                    int sock = remove_connection();
+                    if (sock != 0)
+                    {
+                        server_connection(sock);
+                    }
+                }
                 break;
             }
         }
+
+        const char *message = "This is a message from the server.";
+        if (send(sockfd, message, strlen(message), 0) < 1)
+        {
+            perror("send error");
+            close(sockfd);
+            return;
+        }
+        printf("Sent message to socket %d: %s\n", sockfd, message);
     }
+
     close(sockfd);
+    printf("Server connection ended for socket %d\n", sockfd);
 }
 
-typedef struct { int sockfd; } thread_config_t;
+typedef struct
+{
+    int sockfd;
+} thread_config_t;
 
-void* server_thread(void* arg) {
-    thread_config_t* config = (thread_config_t*)arg;
+void *server_thread(void *arg)
+{
+    thread_config_t *config = (thread_config_t *)arg;
     int sockfd = config->sockfd;
     free(config);
 
     unsigned long id = (unsigned long)pthread_self();
-    printf("Thread %lu created to handle connection with socket %d\n", id,
-           sockfd);
+    printf("Thread %lu started for socket %d\n", id, sockfd);
     server_connection(sockfd);
-    printf("Thread %lu done\n", id);
+    printf("Thread %lu finished for socket %d\n", id, sockfd);
+
+    pthread_mutex_lock(&threadCountMutex);
+    threadCount--;
+    pthread_mutex_unlock(&threadCountMutex);
+    printf("Thread count decreased. Current thread count: %d\n", threadCount);
+
+    remove_connection();
     return 0;
 }
 
-int listen_inet_socket(int portnum) {
+int listen_inet_socket(int portnum)
+{
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
+    if (sockfd < 0)
+    {
         perror_die("socket");
     }
+    printf("Created socket with descriptor %d\n", sockfd);
 
     int opt = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
         perror_die("setsockopt");
     }
+    printf("Socket options set for reuse address\n");
 
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(portnum);
 
-    char ip_str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(addr.sin_addr), ip_str, INET_ADDRSTRLEN);
-    printf("Listening on %s:%d\n", ip_str, ntohs(addr.sin_port));
-
-    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
         perror_die("bind");
     }
+    printf("Socket bound to port %d\n", portnum);
 
-    if (listen(sockfd, 10) < 0) {
+    if (listen(sockfd, 10) < 0)
+    {
         perror_die("listen");
     }
+    printf("Socket is listening for incoming connections\n");
 
     return sockfd;
 }
 
-void report_peer_connected(struct sockaddr_in *peer_addr, socklen_t peer_addr_len) {
+void report_peer_connected(struct sockaddr_in *peer_addr, socklen_t peer_addr_len)
+{
     char peer_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(peer_addr->sin_addr), peer_ip, INET_ADDRSTRLEN);
     printf("Connection from %s:%d\n", peer_ip, ntohs(peer_addr->sin_port));
@@ -132,6 +222,10 @@ void report_peer_connected(struct sockaddr_in *peer_addr, socklen_t peer_addr_le
 
 int main(int argc, char **argv)
 {
+    for (int i = 0; i < MAX_PENDING_CONNECTIONS; i++)
+    {
+        overFlowingThread[i] = -1;
+    }
     setvbuf(stdout, NULL, _IONBF, 0);
     int portnum = 9090;
     if (argc >= 2)
@@ -143,27 +237,44 @@ int main(int argc, char **argv)
 
     int sockfd = listen_inet_socket(portnum);
 
-    while (1) {
+    while (1)
+    {
         struct sockaddr_in peer_addr;
         socklen_t peer_addr_len = sizeof(peer_addr);
 
-        int newsockfd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_addr_len);
+        int newsockfd = accept(sockfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
 
-        if (newsockfd < 0) {
+        if (newsockfd < 0)
+        {
             perror_die("ERROR on accept");
         }
 
         report_peer_connected(&peer_addr, peer_addr_len);
         pthread_t the_thread;
 
-        thread_config_t* config = (thread_config_t*)malloc(sizeof(*config));
-        if (!config) {
+        thread_config_t *config = (thread_config_t *)malloc(sizeof(*config));
+        if (!config)
+        {
             perror_die("OOM");
         }
         config->sockfd = newsockfd;
-        pthread_create(&the_thread, NULL, server_thread, config);
 
-        pthread_detach(the_thread);
+        pthread_mutex_lock(&threadCountMutex);
+        if (threadCount >= MAX_THREADS)
+        {
+            printf("Thread limit reached, adding socket %d to overflow queue\n", newsockfd);
+            add_connection(newsockfd);
+        }
+        else
+        {
+            pthread_create(&the_thread, NULL, server_thread, config);
+            threadCount++;
+            pthread_detach(the_thread);
+            printf("Created thread %lu for socket %d\n", (unsigned long)the_thread, newsockfd);
+        }
+        pthread_mutex_unlock(&threadCountMutex);
     }
+
+    pthread_mutex_destroy(&threadCountMutex);
     return 0;
 }
