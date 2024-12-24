@@ -27,65 +27,74 @@ server-connection/
 ├── .vscode/                    # VS Code configuration files
 │
 ├── blocking.c                  # Blocking server implementation
-├── nonblocking.c               # Non-blocking server implementation
-├── server/                     # Directory containing server-related files
-│   ├── server.c                # Multi-threaded server implementation
-│   ├── threadpool.c            # Custom thread pool logic
-│   ├── threadpool.h            # Thread pool header
+├── nonblocking.c              # Non-blocking server implementation
+├── server/                    # Directory containing server-related files
+│   ├── server.c              # Multi-threaded server implementation
+│   ├── threadpool.c          # Custom thread pool logic
+│   ├── threadpool.h          # Thread pool header
 │
-├── readme.md                   # Project documentation
+└── readme.md                  # Project documentation
+```
 
+## Build Instructions
 
+### Prerequisites
 
-Build Instructions
-Prerequisites
-Compiler: GCC or Clang
-Development Environment: Unix-based OS (Linux/MacOS)
-Make: Installed on the system
-Build the Project
-Clone the repository:
+- Compiler: GCC or Clang
+- Development Environment: Unix-based OS (Linux/MacOS)
+- Make: Installed on the system
 
-bash
-Copy code
+### Build the Project
+
+1. Clone the repository:
+```bash
 git clone https://github.com/aditya0yadav/server-connection.git
 cd server-connection
-Use make to build the project:
+```
 
-bash
-Copy code
+2. Use make to build the project:
+```bash
 make
-The compiled executables will be placed in the bin/ directory.
+```
 
-Usage
-Run the Servers
-Blocking Server:
-bash
-Copy code
+The compiled executables will be placed in the `bin/` directory.
+
+## Usage
+
+### Run the Servers
+
+1. Blocking Server:
+```bash
 ./bin/blocking
-Non-Blocking Server:
-bash
-Copy code
+```
+
+2. Non-Blocking Server:
+```bash
 ./bin/nonblocking
-Multi-Threaded Server:
-bash
-Copy code
+```
+
+3. Multi-Threaded Server:
+```bash
 ./bin/server
-Custom Thread Pool Test
+```
+
+### Custom Thread Pool Test
+
 To test the thread pool implementation:
-bash
-Copy code
+```bash
 ./bin/threadpool_test
-Highlights of Custom Thread Pool
-Pre-allocated Threads: Threads are initialized at the start and reused for processing tasks.
-Job Queue: Client requests are added to a job queue, and threads pick up jobs for execution.
-Synchronization: Implements pthread_mutex and pthread_cond for thread-safe access to shared resources.
-Contributing
+```
+
+## Highlights of Custom Thread Pool
+
+- **Pre-allocated Threads**: Threads are initialized at the start and reused for processing tasks.
+- **Job Queue**: Client requests are added to a job queue, and threads pick up jobs for execution.
+- **Synchronization**: Implements pthread_mutex and pthread_cond for thread-safe access to shared resources.
+
+## Contributing
+
 Feel free to fork the repository, submit pull requests, or open issues for any bugs or feature requests. Contributions are welcome!
 
-License
+## License
+
 This project is licensed under the MIT License.
-
-vbnet
-Copy code
-
-This version improves clarity, provides more details about the structure, and ensures all key features and usage instructions are well-documented. Let me know if you'd like further adjustments!
