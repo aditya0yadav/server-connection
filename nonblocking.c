@@ -221,6 +221,7 @@ void report_peer_connected(struct sockaddr_in *peer_addr, socklen_t peer_addr_le
     inet_ntop(AF_INET, &(peer_addr->sin_addr), peer_ip, INET_ADDRSTRLEN);
     printf("Connection from %s:%d\n", peer_ip, ntohs(peer_addr->sin_port));
 }
+
 int main(int argc, const char** argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -242,6 +243,8 @@ int main(int argc, const char** argv) {
 
   // Set nonblocking mode on the socket.
   int flags = fcntl(newsockfd, F_GETFL, 0);
+  print("%d", flags) ;
+  
   if (flags == -1) {
     perror_die("fcntl F_GETFL");
   }
