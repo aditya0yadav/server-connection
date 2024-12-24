@@ -22,25 +22,7 @@ This project demonstrates three different server connection approaches using C: 
    - Threads are pre-allocated and reused, reducing the overhead of thread creation and destruction.
    - Implements custom job queue logic.
 
----
 
-## Directory Structure
-
-server_connection/
-│
-├── src/
-│   ├── blocking_server.c          # Blocking server implementation
-│   ├── non_blocking_server.c      # Non-blocking server implementation
-│   ├── multi_threading_server.c   # Multi-threaded server implementation
-│   ├── thread_pool.c              # Custom thread pool implementation
-│   └── thread_pool.h              # Header file for the custom thread pool
-│
-├── Makefile                       # Build script
-├── README.md                      # Project documentation
-└── LICENSE                        # License file
-
-
----
 
 ## Setup Instructions
 
